@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>The Akoka Exchange — 3D Visualization</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FCFBF7; --ink:#1C1D1A; --line:#C9C7BE;
+    --green:#2F5233; --accentwarm:#C7752B;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;background:var(--paper);
+    font-family:'Space Grotesk',system-ui,sans-serif;color:var(--ink)}
+  #scene{position:fixed;inset:0}
+  canvas{display:block}
+
+  /* drawing-sheet frame */
+  .sheet-frame{position:fixed;inset:10px;border:1.5px solid var(--ink);
+    pointer-events:none;z-index:5}
+  .sheet-frame::after{content:'';position:absolute;inset:4px;border:0.5px solid var(--line)}
+
+  .titleblock{
+    position:fixed;left:22px;top:22px;z-index:10;pointer-events:none;max-width:min(78vw,460px);
+  }
+  .titleblock .eyebrow{
+    font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.22em;
+    text-transform:uppercase;color:var(--green);margin-bottom:4px}
+  .titleblock h1{
+    font-size:clamp(20px,4.2vw,34px);font-weight:700;letter-spacing:-0.01em;line-height:1.02}
+  .titleblock .sub{
+    font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#55564F;margin-top:6px;line-height:1.5}
+
+  .controls{
+    position:fixed;right:22px;top:22px;z-index:10;display:flex;flex-direction:column;
+    gap:8px;align-items:flex-end}
+  .seg{display:flex;border:1.5px solid var(--ink);background:var(--paper)}
+  .seg button{
+    appearance:none;border:0;background:transparent;color:var(--ink);cursor:pointer;
+    font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.08em;
+    text-transform:uppercase;padding:8px 13px}
+  .seg button+button{border-left:1.5px solid var(--ink)}
+  .seg button.on{background:var(--ink);color:var(--paper)}
+  .seg button:focus-visible{outline:2px solid var(--green);outline-offset:-3px}
+
+  .legend{
+    position:fixed;left:22px;bottom:22px;z-index:10;background:rgba(252,251,247,.92);
+    border:1.5px solid var(--ink);padding:10px 12px;max-width:min(92vw,540px)}
+  .legend .lg-title{font-family:'IBM Plex Mono',monospace;font-size:9.5px;
+    letter-spacing:.2em;text-transform:uppercase;margin-bottom:7px;color:#55564F}
+  .legend .chips{display:flex;flex-wrap:wrap;gap:6px 12px}
+  .chip{display:flex;align-items:center;gap:6px;font-size:11.5px}
+  .chip i{width:13px;height:13px;border:1px solid var(--ink);display:inline-block}
+
+  .stamp{
+    position:fixed;right:22px;bottom:22px;z-index:10;text-align:right;pointer-events:none;
+    font-family:'IBM Plex Mono',monospace;font-size:10px;color:#55564F;line-height:1.6}
+  .stamp b{color:var(--ink)}
+
+  .hint{
+    position:fixed;left:50%;bottom:88px;transform:translateX(-50%);z-index:9;
+    font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;
+    text-transform:uppercase;color:#7A7B72;background:rgba(252,251,247,.85);
+    padding:4px 10px;border:0.5px solid var(--line);transition:opacity .6s;pointer-events:none}
+  .hint.hide{opacity:0}
+
+  @media (max-width:640px){
+    .titleblock{top:18px;left:18px}
+    .controls{right:18px;top:auto;bottom:150px}
+    .legend{left:18px;right:18px;bottom:18px;max-width:none}
+    .legend .chips{gap:4px 10px}
+    .chip{font-size:10.5px}
+    .stamp{display:none}
+    .hint{bottom:auto;top:120px}
+    .sheet-frame{inset:6px}
+  }
+  @media (prefers-reduced-motion:reduce){ .hint{transition:none} }
+</style>
+</head>
+<body>
+<div id="scene"></div>
+<div class="sheet-frame" aria-hidden="true"></div>
+
+<header class="titleblock">
+  <div class="eyebrow">ARC 265 · Design Studio · UNILAG</div>
+  <h1>THE AKOKA EXCHANGE</h1>
+  <div class="sub">Two-storey campus shopping complex · pinwheel of three L-blocks around a landscaped courtyard · site ≈ 50 m × 50 m opposite FSS</div>
+</header>
+
+<div class="controls">
+  <div class="seg" role="group" aria-label="View mode">
+    <button id="btnAssembled" class="on">Assembled</button>
+    <button id="btnExploded">Exploded</button>
+  </div>
+  <div class="seg">
+    <button id="btnLabels" class="on">Labels</button>
+    <button id="btnSpin" class="on">Spin</button>
+  </div>
+</div>
+
+<div class="legend">
+  <div class="lg-title">Programme key</div>
+  <div class="chips">
+    <span class="chip"><i style="background:#F6DDB2"></i>Retail</span>
+    <span class="chip"><i style="background:#F2B8A6"></i>Eateries</span>
+    <span class="chip"><i style="background:#EFB6C8"></i>Pop-up / exhibition</span>
+    <span class="chip"><i style="background:#BCD3BC"></i>Study · lounge · terrace</span>
+    <span class="chip"><i style="background:#E4C878"></i>Office</span>
+    <span class="chip"><i style="background:#D8CCE6"></i>Toilets</span>
+    <span class="chip"><i style="background:#B7CBE4"></i>Cores + bridges</span>
+    <span class="chip"><i style="background:#A9C79A"></i>Courtyard</span>
+  </div>
+</div>
+
+<div class="stamp">
+  <b>SCHEMATIC MASSING · 1:200</b><br>
+  N · E · SW entrances breathe through the court<br>
+  link bridges join the blocks at first floor
+</div>
+
+<div class="hint" id="hint">Drag to orbit · scroll / pinch to zoom</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+"use strict";
+
+/* ---------- palette ---------- */
+const C = {
+  retail:0xF6DDB2, eatery:0xF2B8A6, popup:0xEFB6C8, green:0xBCD3BC,
+  office:0xE4C878, toilet:0xD8CCE6, core:0xB7CBE4,
+  slab:0xF4F1E8, roof:0xEFEBDF, paving:0xD9D6CC, court:0xA9C79A,
+  path:0xCE8A45, road:0x8E8C86, trunk:0x8A6A48, leaf:0x5E8A57,
+  ink:0x2A2B27
+};
+
+/* ---------- scene ---------- */
+const container = document.getElementById('scene');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xE8ECE4);
+scene.fog = new THREE.Fog(0xE8ECE4, 190, 340);
+
+const camera = new THREE.PerspectiveCamera(42, innerWidth/innerHeight, 0.5, 600);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth,innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+container.appendChild(renderer.domElement);
+
+/* lights — warm Lagos afternoon */
+scene.add(new THREE.HemisphereLight(0xF2F5EC, 0xB8B4A6, 0.85));
+const sun = new THREE.DirectionalLight(0xFFF0DC, 1.05);
+sun.position.set(-55, 80, 45);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048);
+const sc = sun.shadow.camera;
+sc.left=-70; sc.right=70; sc.top=70; sc.bottom=-70; sc.far=250;
+scene.add(sun);
+
+/* ---------- helpers ---------- */
+/* plan coords: x = east (0..50), z = south (0..50). North edge = z 0. */
+const CTR = new THREE.Vector3(25, 3, 25);
+const matCache = {};
+function mat(color){
+  if(!matCache[color]) matCache[color] = new THREE.MeshLambertMaterial({color});
+  return matCache[color];
+}
+const edgeMat = new THREE.LineBasicMaterial({color:C.ink, transparent:true, opacity:0.55});
+
+function box(group, x1,z1,x2,z2, y0,y1, color, edges=true, shadow=true){
+  const w=x2-x1, d=z2-z1, h=y1-y0;
+  const g = new THREE.BoxGeometry(w,h,d);
+  const m = new THREE.Mesh(g, mat(color));
+  m.position.set(x1+w/2, y0+h/2, z1+d/2);
+  m.castShadow = shadow; m.receiveShadow = true;
+  group.add(m);
+  if(edges){
+    const e = new THREE.LineSegments(new THREE.EdgesGeometry(g), edgeMat);
+    e.position.copy(m.position);
+    group.add(e);
+  }
+  return m;
+}
+
+function textSprite(text, opts={}){
+  const px = opts.px||46, pad=26;
+  const cv = document.createElement('canvas');
+  const cx = cv.getContext('2d');
+  const font = `${opts.bold?'700':'500'} ${px}px 'IBM Plex Mono', monospace`;
+  cx.font = font;
+  const w = Math.ceil(cx.measureText(text).width)+pad*2, h = px+pad*1.5;
+  cv.width=w; cv.height=h;
+  cx.font = font; cx.textBaseline='middle';
+  if(opts.pill!==false){
+    cx.fillStyle='rgba(252,251,247,0.93)';
+    cx.fillRect(0,0,w,h);
+    cx.strokeStyle='#1C1D1A'; cx.lineWidth=3;
+    cx.strokeRect(2,2,w-4,h-4);
+  }
+  cx.fillStyle = opts.color||'#1C1D1A';
+  cx.fillText(text, pad, h/2+2);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.minFilter = THREE.LinearFilter;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({map:tex, depthTest:false}));
+  const s = opts.scale||0.05;
+  sp.scale.set(w*s, h*s, 1);
+  sp.renderOrder = 10;
+  return sp;
+}
+
+/* ---------- ground / site ---------- */
+const siteGroup = new THREE.Group(); scene.add(siteGroup);
+
+box(siteGroup,-14,-10,64,58, -0.6,0, 0xCBC8BC, false);          // context ground
+box(siteGroup,-1,-1,51,51, -0.05,0.22, C.paving, false);        // site paving
+box(siteGroup, 1,11,34,49, 0.22,0.34, C.court, false, false);   // courtyard lawn
+box(siteGroup, 16,1,23,13, 0.22,0.34, C.court, false, false);   // north gap
+box(siteGroup, 33,19,49,26, 0.22,0.34, C.court, false, false);  // east gap
+
+/* Commercial Rd along east edge + kerb */
+box(siteGroup, 56,-10,64,58, -0.02,0.12, C.road, false, false);
+box(siteGroup, 55.4,-10,56,58, 0.12,0.3, 0xBDBAB0, false, false);
+
+/* walkway spine (flat ribbons) */
+function ribbon(x1,z1,x2,z2,wd=2.2){
+  const dx=x2-x1, dz=z2-z1, len=Math.hypot(dx,dz);
+  const g=new THREE.BoxGeometry(len,0.1,wd);
+  const m=new THREE.Mesh(g, mat(C.path));
+  m.position.set((x1+x2)/2, 0.4, (z1+z2)/2);
+  m.rotation.y = -Math.atan2(dz,dx);
+  m.receiveShadow=true;
+  siteGroup.add(m);
+}
+ribbon(4.5,45.5, 19.5,27.5);      // SW plaza → court
+ribbon(19.5,27.5, 19.5,1.0);      // → N main entrance
+ribbon(19.5,27.5, 49,22.5);       // → E entrance
+box(siteGroup, 1.5,43, 8.5,49.5, 0.22,0.42, C.path, false, false); // SW entrance plaza
+
+/* trees */
+function tree(x,z,s=1){
+  const t=new THREE.Mesh(new THREE.CylinderGeometry(0.22*s,0.3*s,2.4*s,6), mat(C.trunk));
+  t.position.set(x,1.2*s,z); t.castShadow=true; siteGroup.add(t);
+  const k=new THREE.Mesh(new THREE.IcosahedronGeometry(1.9*s,1), mat(C.leaf));
+  k.position.set(x,3.2*s,z); k.castShadow=true;
+  k.scale.y=0.8; siteGroup.add(k);
+}
+[[13,25,1.1],[21,33,1.25],[8,37,1],[15,43,1.1],[27,22,0.95],[29,30,1.05],[6,19,0.9]]
+  .forEach(p=>tree(...p));
+/* Parks & Gardens nursery fringe, south + west */
+[[-5,40,1.3],[-7,26,1.1],[6,55,1.2],[18,55,1.4],[30,55,1.1],[42,54,1.3],[-6,52,1.2],[-4,10,1.2]]
+  .forEach(p=>tree(...p));
+
+/* ---------- building groups ---------- */
+const G0 = new THREE.Group();   // ground floor
+const G1 = new THREE.Group();   // first floor + bridges
+const GR = new THREE.Group();   // roof
+scene.add(G0,G1,GR);
+
+const FF=4;               // floor-to-floor
+const U0=[0.34,3.7];      // ground units y-range
+const S1=[3.7,4.3];       // first-floor slab
+const U1=[4.3,7.7];       // first units
+const RF=[7.7,8.35];      // roof plate
+
+/* block rectangles (for slabs + roofs) */
+const RECTS = [
+  [2,2,17,13],[2,13,9,22],        // NW block
+  [22,2,48,10],[33,10,48,20],     // NE block
+  [33,25,48,35],[24,35,48,48]     // SE block
+];
+
+/* ground-floor units  [x1,z1,x2,z2,color] */
+[
+  [2,2,9,8,C.retail],[9,2,17,8,C.retail],[2,8,9,13,C.retail],
+  [9,8,17,13,C.core],[2,13,9,22,C.toilet],
+  [22,2,31,10,C.retail],[31,2,40,10,C.retail],[40,2,48,10,C.core],
+  [33,10,48,20,C.eatery],
+  [33,25,48,32,C.eatery],[33,32,48,35,C.core],
+  [24,35,33,48,C.eatery],[33,35,39,48,C.retail],
+  [39,35,43.5,48,0xCFCDC3],[43.5,35,48,48,0xCFCDC3]
+].forEach(u=>box(G0,u[0],u[1],u[2],u[3],U0[0],U0[1],u[4]));
+
+/* first-floor slabs */
+RECTS.forEach(r=>box(G1,r[0]-0.2,r[1]-0.2,r[2]+0.2,r[3]+0.2,S1[0],S1[1],C.slab));
+
+/* first-floor units */
+[
+  [2,2,9,8,C.retail],[9,2,17,8,C.retail],
+  [9,8,17,13,C.core],[2,8,9,22,C.green],
+  [22,2,31,10,C.retail],[31,2,40,10,C.retail],[40,2,48,10,C.core],
+  [33,10,48,15,C.office],[33,15,48,20,C.toilet],
+  [33,25,48,32,C.popup],[33,32,48,35,C.core],
+  [24,35,39,48,C.popup]
+].forEach(u=>box(G1,u[0],u[1],u[2],u[3],U1[0],U1[1],u[4]));
+
+/* covered terrace: open deck + slim columns (roof plate covers it above) */
+box(G1,39,35,48,48,U1[0],U1[0]+0.35,C.green);
+[[40,36.2],[47,36.2],[40,46.8],[47,46.8]].forEach(p=>{
+  const c=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.16,U1[1]-U1[0],8), mat(0xF4F1E8));
+  c.position.set(p[0],(U1[0]+U1[1])/2,p[1]); c.castShadow=true; G1.add(c);
+});
+
+/* link bridges (first floor) */
+box(G1,17,3,22,9, S1[0],U1[1], C.core);   // north bridge
+box(G1,40,20,47,25, S1[0],U1[1], C.core); // east bridge
+
+/* roof plates with overhang, incl. bridges */
+RECTS.concat([[17,3,22,9],[40,20,47,25]]).forEach(r=>
+  box(GR, r[0]-1, r[1]-1, r[2]+1, r[3]+1, RF[0], RF[1], C.roof));
+
+/* ---------- labels ---------- */
+const labelGroup = new THREE.Group(); scene.add(labelGroup);
+function addLabel(text,x,y,z,opts){ const s=textSprite(text,opts); s.position.set(x,y,z); labelGroup.add(s); return s; }
+addLabel('MAIN ENTRANCE · N', 19.5, 12, -3.5, {scale:0.045});
+addLabel('ENTRANCE · E', 55, 10.5, 22.5, {scale:0.045});
+addLabel('SW ENTRANCE PLAZA', 3, 8.5, 51.5, {scale:0.045});
+addLabel('LANDSCAPED COURTYARD', 17, 2.6, 31, {scale:0.042, pill:false, color:'#2F5233', bold:true});
+const bridgeL1=addLabel('LINK BRIDGE', 19.5, 10.6, 6, {scale:0.036});
+const bridgeL2=addLabel('LINK BRIDGE', 43.5, 10.6, 22.5, {scale:0.036});
+
+/* entrance arrows */
+function arrow(x,z,ry){
+  const g=new THREE.Group();
+  const shaft=new THREE.Mesh(new THREE.BoxGeometry(3.4,0.28,1.1), mat(C.path));
+  const head=new THREE.Mesh(new THREE.ConeGeometry(1.15,2,4), mat(C.path));
+  head.rotation.z=-Math.PI/2; head.rotation.y=Math.PI/4; head.position.x=2.6;
+  g.add(shaft,head);
+  g.position.set(x,0.7,z); g.rotation.y=ry;
+  g.traverse(o=>o.castShadow=true);
+  scene.add(g);
+}
+arrow(19.5,-4.2, -Math.PI/2);   // N, pointing south into site
+arrow(53.5,22.5, Math.PI);      // E, pointing west
+arrow(-0.5,50.5, Math.PI/4);    // SW, pointing NE
+
+/* floor captions (exploded mode) */
+const capG = textSprite('GROUND FLOOR — retail · eateries · services', {scale:0.05,bold:true});
+const cap1 = textSprite('FIRST FLOOR — specialist retail · study · pop-ups · bridges', {scale:0.05,bold:true});
+const capR = textSprite('ROOF — deep overhangs for sun + rain', {scale:0.05,bold:true});
+capG.position.set(-16,2,25);  G0.add(capG);
+cap1.position.set(-16,5.6,25); G1.add(cap1);
+capR.position.set(-16,8,25);  GR.add(capR);
+
+/* north arrow in scene */
+(function(){
+  const n=new THREE.Mesh(new THREE.ConeGeometry(1,3.2,4), mat(C.ink));
+  n.rotation.x=-Math.PI/2; n.rotation.z=Math.PI/4;
+  n.position.set(56,0.6,-5.5); scene.add(n);
+  addLabel('N', 56, 3.4, -8.5, {scale:0.05, bold:true, pill:false});
+})();
+
+/* ---------- camera controls (custom orbit) ---------- */
+let theta=-0.72, phi=1.02, radius=98;
+let targetTheta=theta, targetPhi=phi, targetRadius=radius;
+let spinning=true, interacted=false;
+
+function applyCamera(){
+  camera.position.set(
+    CTR.x + radius*Math.sin(phi)*Math.sin(theta),
+    CTR.y + radius*Math.cos(phi),
+    CTR.z + radius*Math.sin(phi)*Math.cos(theta)
+  );
+  camera.lookAt(CTR);
+}
+
+const el = renderer.domElement;
+let dragging=false, px=0, py=0, pinchD=0;
+
+function down(x,y){ dragging=true; px=x; py=y; onInteract(); }
+function move(x,y){
+  if(!dragging) return;
+  targetTheta -= (x-px)*0.0055;
+  targetPhi   -= (y-py)*0.0045;
+  targetPhi = Math.max(0.25, Math.min(1.42, targetPhi));
+  px=x; py=y;
+}
+el.addEventListener('mousedown',e=>down(e.clientX,e.clientY));
+addEventListener('mousemove',e=>move(e.clientX,e.clientY));
+addEventListener('mouseup',()=>dragging=false);
+el.addEventListener('wheel',e=>{
+  e.preventDefault(); onInteract();
+  targetRadius = Math.max(35, Math.min(220, targetRadius + e.deltaY*0.09));
+},{passive:false});
+el.addEventListener('touchstart',e=>{
+  if(e.touches.length===1) down(e.touches[0].clientX,e.touches[0].clientY);
+  else if(e.touches.length===2){
+    pinchD=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,
+                      e.touches[0].clientY-e.touches[1].clientY);
+  }
+},{passive:true});
+el.addEventListener('touchmove',e=>{
+  if(e.touches.length===1) move(e.touches[0].clientX,e.touches[0].clientY);
+  else if(e.touches.length===2){
+    const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,
+                       e.touches[0].clientY-e.touches[1].clientY);
+    targetRadius=Math.max(35,Math.min(220,targetRadius+(pinchD-d)*0.25));
+    pinchD=d; onInteract();
+  }
+  e.preventDefault();
+},{passive:false});
+el.addEventListener('touchend',()=>dragging=false);
+
+function onInteract(){
+  if(!interacted){
+    interacted=true; spinning=false;
+    document.getElementById('btnSpin').classList.remove('on');
+    document.getElementById('hint').classList.add('hide');
+  }
+}
+
+/* ---------- UI ---------- */
+let exploded=false, targetOff1=0, targetOffR=0, off1=0, offR=0;
+const bA=document.getElementById('btnAssembled'),
+      bE=document.getElementById('btnExploded'),
+      bL=document.getElementById('btnLabels'),
+      bS=document.getElementById('btnSpin');
+
+function setMode(x){
+  exploded=x;
+  bA.classList.toggle('on',!x); bE.classList.toggle('on',x);
+  targetOff1 = x?9:0; targetOffR = x?18:0;
+  capG.visible=cap1.visible=capR.visible=x;
+  bridgeL1.visible=bridgeL2.visible = !x && bL.classList.contains('on');
+}
+bA.onclick=()=>setMode(false);
+bE.onclick=()=>setMode(true);
+bL.onclick=()=>{
+  const on=!bL.classList.contains('on');
+  bL.classList.toggle('on',on);
+  labelGroup.visible=on;
+  bridgeL1.visible=bridgeL2.visible = on && !exploded;
+};
+bS.onclick=()=>{
+  spinning=!spinning;
+  bS.classList.toggle('on',spinning);
+  interacted=true;
+  document.getElementById('hint').classList.add('hide');
+};
+capG.visible=cap1.visible=capR.visible=false;
+
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+if(reduceMotion) { spinning=false; bS.classList.remove('on'); }
+
+addEventListener('resize',()=>{
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+
+setTimeout(()=>document.getElementById('hint').classList.add('hide'), 7000);
+
+/* ---------- loop ---------- */
+function tick(){
+  requestAnimationFrame(tick);
+  if(spinning) targetTheta += 0.0016;
+  theta += (targetTheta-theta)*0.09;
+  phi   += (targetPhi-phi)*0.09;
+  radius+= (targetRadius-radius)*0.09;
+  const k = reduceMotion?1:0.075;
+  off1 += (targetOff1-off1)*k;
+  offR += (targetOffR-offR)*k;
+  G1.position.y = off1;
+  GR.position.y = offR;
+  applyCamera();
+  renderer.render(scene,camera);
+}
+applyCamera();
+tick();
+})();
+</script>
+</body>
+</html>
